@@ -1,15 +1,26 @@
 package main
 
 import (
-	"fmt"
 	"math/rand"
+	"strconv"
 	"time"
 
 	"github.com/nsf/termbox-go"
 )
 
+const (
+	MoveUp = iota
+	MoveDown
+	MoveLeft
+	MoveRight
+)
+
+var (
+	score = 0
+)
+
 type PlayGround struct {
-	direction  string
+	direction  int
 	snake      [][]int
 	food       [][]int
 	background [][]int
@@ -23,33 +34,47 @@ func newPlayGround() *PlayGround {
 	width := 25
 	height := 32
 	var background [][]int
-
-	//init background
 	for i := 0; i < width; i++ {
-		var row []int
+		background = append(background, []int{})
 		for j := 0; j < height; j++ {
-			row = append(row, 0)
+			background[i] = append(background[i], 0)
 		}
-		background = append(background, row)
 	}
 
-	//init snake
-	for _, v := range snake {
-		background[v[0]][v[1]] = 1
+	p := &PlayGround{
+		direction:  MoveRight,
+		snake:      snake,
+		food:       food,
+		background: background,
+		width:      width,
+		height:     height,
 	}
 
-	//init food
-	for _, v := range food {
-		background[v[0]][v[1]] = 2
-	}
-
-	return &PlayGround{snake: snake, food: food, background: background, width: width, height: height}
+	p.updatePlayGround()
+	return p
 }
 
-func (p *PlayGround) move(direction string) bool {
-	//头部和尾部
-	head := p.snake[0]
-	//尾部
+func (p *PlayGround) updatePlayGround() {
+	for i := 0; i < p.width; i++ {
+		for j := 0; j < p.height; j++ {
+			p.background[i][j] = 0
+		}
+	}
+
+	for _, v := range p.snake {
+		p.background[v[0]][v[1]] = 1
+	}
+
+	for _, v := range p.food {
+		p.background[v[0]][v[1]] = 2
+	}
+}
+
+func (p *PlayGround) move(direction int) bool {
+	//避免反向移动
+	p.changeDirection(direction)
+	direction = p.direction
+
 	x := p.snake[len(p.snake)-1][0]
 	y := p.snake[len(p.snake)-1][1]
 	tail := []int{x, y}
@@ -63,18 +88,15 @@ func (p *PlayGround) move(direction string) bool {
 	}
 
 	switch direction {
-	case "w":
-		head[0]--
-	case "s":
-		head[0]++
-	case "a":
-		head[1]--
-	case "d":
-		head[1]++
+	case MoveUp:
+		p.snake[0][0]--
+	case MoveDown:
+		p.snake[0][0]++
+	case MoveLeft:
+		p.snake[0][1]--
+	case MoveRight:
+		p.snake[0][1]++
 	}
-
-	//移动头部
-	p.snake[0] = head
 
 	//是否碰撞
 	if p.isCollision() {
@@ -82,29 +104,34 @@ func (p *PlayGround) move(direction string) bool {
 	}
 	//是否吃到食物
 	if p.eatFood() {
+		score++
 		p.snake = append(p.snake, tail)
 		p.food = [][]int{}
 		p.randomFood()
 	}
 	//更新背景
-	for i := 0; i < p.width; i++ {
-		for j := 0; j < p.height; j++ {
-			p.background[i][j] = 0
-		}
-	}
-	for _, v := range p.snake {
-		p.background[v[0]][v[1]] = 1
-	}
-	for _, v := range p.food {
-		p.background[v[0]][v[1]] = 2
-	}
+	p.updatePlayGround()
 	return true
+}
+
+func (p *PlayGround) changeDirection(d int) bool {
+	result := map[int]int{
+		MoveUp:    MoveDown,
+		MoveDown:  MoveUp,
+		MoveLeft:  MoveRight,
+		MoveRight: MoveLeft,
+	}
+	if p.direction != result[d] {
+		p.direction = d
+		return true
+	}
+	return false
 }
 
 //碰撞检测
 func (p *PlayGround) isCollision() bool {
 	//边界碰撞
-	if p.snake[0][0] < 0 || p.snake[0][0] > p.width || p.snake[0][1] < 0 || p.snake[0][1] > p.height {
+	if p.snake[0][0] < 0 || p.snake[0][0] >= p.width || p.snake[0][1] < 0 || p.snake[0][1] >= p.height {
 		return true
 	}
 	//自身碰撞
@@ -140,7 +167,7 @@ func (p *PlayGround) randomFood() {
 	p.food = append(p.food, []int{x, y})
 }
 
-func print(x, y int, fg, bg termbox.Attribute, msg string) {
+func show(x, y int, fg, bg termbox.Attribute, msg string) {
 	for _, c := range msg {
 		termbox.SetCell(x, y, c, fg, bg)
 		x += 1
@@ -155,46 +182,47 @@ func (p *PlayGround) render(background [][]int) {
 	for i := 0; i < len(background); i++ {
 		for j := 0; j < len(background[i]); j++ {
 			if background[i][j] == 0 {
-				print(l+j*2, i+t, termbox.ColorWhite, termbox.ColorWhite, "  ")
+				show(l+j*2, i+t, termbox.ColorWhite, termbox.ColorWhite, "  ")
 			}
 			if background[i][j] == 1 {
-				print(l+j*2, i+t, termbox.ColorGreen, termbox.ColorGreen, "██")
+				show(l+j*2, i+t, termbox.ColorGreen, termbox.ColorGreen, "██")
 			}
 			if background[i][j] == 2 {
-				print(l+j*2, i+t, termbox.ColorRed, termbox.ColorRed, "██")
+				show(l+j*2, i+t, termbox.ColorRed, termbox.ColorRed, "██")
 			}
 		}
 	}
-	//渲染边界
-	//for i := 0; i < 25; i++ {
-	//	print(i*2+5, 25, termbox.ColorYellow, termbox.ColorYellow, "  ")
-	//}
-	//for i := 0; i < 25; i++ {
-	//	print(i*2+5, 0, termbox.ColorYellow, termbox.ColorYellow, "  ")
-	//}
-	//for i := 0; i < 25; i++ {
-	//	print(5, i, termbox.ColorYellow, termbox.ColorYellow, "  ")
-	//}
-	//for i := 0; i < 25; i++ {
-	//	print(55, i, termbox.ColorYellow, termbox.ColorYellow, "  ")
-	//}
+	//显示分数
+	show(l, t-2, termbox.ColorBlue, termbox.ColorDefault, "Score: "+strconv.Itoa(score))
+	//显示提示
+	show(l, t+p.width+1, termbox.ColorBlue, termbox.ColorDefault, "Press ESC or Ctrl+C to exit")
+
 	termbox.Flush()
 }
 
-func keyTransfer(key termbox.Key) string {
-	//TODO wasd
-	switch key {
-	case termbox.KeyArrowUp:
-		return "w"
-	case termbox.KeyArrowDown:
-		return "s"
-	case termbox.KeyArrowLeft:
-		return "a"
-	case termbox.KeyArrowRight:
-		return "d"
-	default:
-		return " "
+func finallyScore() {
+	w, h := termbox.Size()
+	l := w/2 - 10
+	t := h/2 - 2
+	show(l, t, termbox.ColorWhite, termbox.ColorDefault, "Game Over!")
+	show(l, t+1, termbox.ColorWhite, termbox.ColorDefault, "Your score is: "+strconv.Itoa(score))
+	termbox.Flush()
+}
+
+func moveEventKey(ev termbox.Event) int {
+	var direction int
+	if ev.Key == termbox.KeyArrowUp || ev.Ch == 'w' {
+		direction = MoveUp
+	} else if ev.Key == termbox.KeyArrowDown || ev.Ch == 's' {
+		direction = MoveDown
+	} else if ev.Key == termbox.KeyArrowLeft || ev.Ch == 'a' {
+		direction = MoveLeft
+	} else if ev.Key == termbox.KeyArrowRight || ev.Ch == 'd' {
+		direction = MoveRight
+	} else {
+		direction = -1
 	}
+	return direction
 }
 
 func main() {
@@ -205,28 +233,27 @@ func main() {
 	if err := termbox.Init(); err != nil {
 		panic(err)
 	}
-
-	//w, h := termbox.Size()
+	defer termbox.Close()
 
 	playGround.render(playGround.background)
 
 	for {
 		switch ev := termbox.PollEvent(); ev.Type {
 		case termbox.EventKey:
-			switch ev.Key {
-			case termbox.KeyEsc, termbox.KeyCtrlC:
-				termbox.Close()
+			if ev.Key == termbox.KeyEsc || ev.Key == termbox.KeyCtrlC {
 				return
-			default:
-				if playGround.move(keyTransfer(ev.Key)) {
+			}
+			s := moveEventKey(ev)
+			if s != -1 {
+				if playGround.move(s) {
 					playGround.render(playGround.background)
 				} else {
-					termbox.Close()
-					fmt.Println("Game Over")
+					finallyScore()
+					time.Sleep(3 * time.Second)
 					return
 				}
 			}
-			time.Sleep(time.Second / 10)
+			//time.Sleep(time.Second / 10)
 		}
 	}
 }
